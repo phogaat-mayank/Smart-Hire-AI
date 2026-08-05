@@ -1,0 +1,8 @@
+Does the candidate know Python?
+What projects has the candidate completed?
+Does the candidate have Machine Learning experience?
+What are the candidate's strongest technical skills?
+Is the candidate suitable for this job? Explain.
+Which important skills are missing?
+Has the candidate worked with databases?
+What frameworks has the candidate used?

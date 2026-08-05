@@ -1,61 +1,280 @@
+/* ===========================
+   GLOBAL
+=========================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 body {
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    min-height: 100vh;
+    font-family: 'Poppins', sans-serif;
+    background: #f5f7fb;
+    overflow-x: hidden;
+    color: #1e293b;
 }
 
-.hover-title {
-    transition: all 0.4s ease;
-    cursor: pointer;
+
+/* ===========================
+   PARTICLES
+=========================== */
+
+#tsparticles {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    z-index: -1;
 }
 
-.hover-title:hover {
-    transform: scale(1.1);
-    text-shadow: 0 0 10px white, 0 0 20px #00c6ff, 0 0 30px #0072ff;
+
+/* ===========================
+   HERO
+=========================== */
+
+.hero-section {
+    min-height: 90vh;
+    display: flex;
+    align-items: center;
 }
 
-.resume-card {
-    border-radius: 15px;
-    transition: 0.3s ease;
-}
 
-.resume-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
-}
+/* ===========================
+   UPLOAD CARD
+=========================== */
 
-.skill-badge {
-    display: inline-block;
-    background: linear-gradient(135deg, #4e73df, #1cc88a);
-    color: white;
-    padding: 6px 14px;
+.upload-card {
+    background: white;
     border-radius: 20px;
-    font-size: 13px;
-    margin: 4px 4px 0 0;
+    padding: 40px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, .08);
+    transition: .4s;
+}
+
+.upload-card:hover {
+    transform: translateY(-8px);
+}
+
+
+/* ===========================
+   FEATURE PILLS
+=========================== */
+
+.feature-pill {
+    background: white;
+    padding: 12px 20px;
+    border-radius: 50px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .06);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.feature-pill i {
+    color: #2563eb;
+}
+
+
+/* ===========================
+   BUTTON
+=========================== */
+
+.btn-primary {
+    background: #2563eb;
+    border: none;
+    border-radius: 12px;
+    transition: .3s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 35px rgba(37, 99, 235, .3);
+}
+
+
+/* ===========================
+   INPUTS
+=========================== */
+
+.form-control {
+    border-radius: 12px;
+    padding: 15px;
+    border: 1px solid #dbe4f0;
+}
+
+.form-control:focus {
+    box-shadow: 0 0 0 .25rem rgba(37, 99, 235, .15);
+    border-color: #2563eb;
+}
+
+
+/* ===========================
+   BADGE
+=========================== */
+
+.badge {
+    font-size: .9rem;
+    border-radius: 30px;
+    padding: 10px 20px;
+}
+
+
+/* ===========================
+   RESPONSIVE
+=========================== */
+
+@media(max-width:992px) {
+    .hero-section {
+        padding: 50px 0;
+    }
+
+    .upload-card {
+        margin-top: 40px;
+    }
+}
+
+
+/* =====================================================
+   RESUME ANALYSIS DASHBOARD
+===================================================== */
+
+.dashboard-card {
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 15px 40px rgba(15, 23, 42, .08);
+    transition: all .35s ease;
+    border: 1px solid #eef2f7;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, .12);
+}
+
+.score-card {
+    background: linear-gradient(145deg, #ffffff, #f8fbff);
+    border-radius: 20px;
+    padding: 30px;
+    text-align: center;
+    box-shadow: 0 12px 35px rgba(0, 0, 0, .08);
+    transition: .35s;
+    height: 100%;
+}
+
+.score-card:hover {
+    transform: translateY(-8px);
+}
+
+.score-card h6 {
+    color: #64748b;
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.score-card h2 {
+    font-size: 2.6rem;
+    font-weight: 700;
+    color: #2563eb;
+}
+
+.recommendation-badge {
+    background: #e8f5e9;
+    color: #15803d;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-weight: 600;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .05);
+}
+
+.progress {
+    height: 10px;
+    border-radius: 50px;
+    overflow: hidden;
+    background: #edf2f7;
 }
 
 .progress-bar {
-    transition: width 1.5s ease-in-out;
+    border-radius: 50px;
+    animation: growBar 1.4s ease;
 }
 
-body {
-    transition: background 0.3s ease, color 0.3s ease;
+@keyframes growBar {
+    from {
+        width: 0;
+    }
 }
 
-.dark-mode {
-    background-color: #121212 !important;
-    color: #ffffff !important;
+.list-group-item {
+    border: none;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 14px 0;
+    font-weight: 500;
+    background: transparent;
 }
 
-.dark-mode .card {
-    background-color: #1e1e1e;
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+
+/* ===========================
+   Candidate Summary
+=========================== */
+
+.candidate-summary {
+    padding: 35px;
+}
+
+.candidate-avatar {
+    width: 85px;
+    height: 85px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #2563eb, #4f46e5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: white;
+    font-size: 34px;
 }
 
-.dark-mode .table {
-    color: white;
+.status-pill {
+    display: inline-block;
+    padding: 12px 26px;
+    border-radius: 50px;
+    font-weight: 600;
 }
 
-.dark-mode .list-group-item {
-    background-color: #1e1e1e;
-    color: white;
+.status-pill.success {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.status-pill.primary {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.status-pill.warning {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.status-pill.danger {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.badge {
+    border-radius: 30px;
+    font-weight: 500;
+}
+
+.logo {
+    width: 70px;
+    height: 70px;
+    object-fit: contain;
 }
