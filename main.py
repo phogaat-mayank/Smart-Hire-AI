@@ -2,6 +2,7 @@ import json
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from io import BytesIO
 from xml.sax.saxutils import escape
@@ -36,9 +37,15 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
+import torch
 from sqlalchemy import func, inspect, text
 from werkzeug.security import check_password_hash, generate_password_hash
 import numpy as np
+
+try:
+    torch.set_num_threads(2)
+except Exception:
+    pass
 
 try:
     import psycopg2.extensions
@@ -227,10 +234,10 @@ def extract_text_from_pdf(file):
     try:
         reader = PyPDF2.PdfReader(file)
         text = ""
-        for page in reader.pages:
+        for page in reader.pages[:4]:
             page_text = page.extract_text()
             if page_text:
-                text += page_text
+                text += page_text + "\n"
         return text
     except Exception as e:
         print("PDF extraction error:", e)
@@ -586,9 +593,21 @@ def index():
             if not resume_texts:
                 flash("No readable text found in the uploaded resume(s). Please upload text-based PDFs.", "warning")
             else:
-                # Batch BERT Encoding
-                resume_embeddings = model.encode(resume_texts)
-                jd_embedding = model.encode(job_description)
+                # Fast parallel AI summary generation
+                print(f"Generating AI Summaries in parallel for {len(resume_texts)} resumes...")
+                with ThreadPoolExecutor(max_workers=min(len(resume_texts), 5)) as executor:
+                    summaries = list(executor.map(generate_resume_summary, resume_texts))
+
+                # Batch BERT Encoding with torch inference mode
+                with torch.inference_mode():
+                    resume_embeddings = model.encode(resume_texts, batch_size=8, show_progress_bar=False)
+                    jd_embedding = model.encode(job_description, show_progress_bar=False)
+
+                resume_objects = []
+                scores = []
+                ats_scores = []
+                matched_skills_list = []
+                missing_skills_list = []
 
                 # Process each resume
                 for i, resume_embedding in enumerate(resume_embeddings):
@@ -613,9 +632,10 @@ def index():
                     if ats_score > 100.0:
                         ats_score = 100.0
 
-                    print("Generating AI Summary...")
-                    summary = generate_resume_summary(resume_texts[i])
-                    print("Summary Generated Successfully!")
+                    scores.append(score)
+                    ats_scores.append(ats_score)
+                    matched_skills_list.append(matched_skills)
+                    missing_skills_list.append(missing_skills)
 
                     resume_result = ResumeResult(
                         candidate_name=file_names[i].replace(".pdf", ""),
@@ -624,29 +644,31 @@ def index():
                         ats_score=ats_score,
                         matched_skills=", ".join(matched_skills),
                         missing_skills=", ".join(missing_skills),
-                        resume_summary=summary,
+                        resume_summary=summaries[i],
                         resume_text=resume_texts[i],
                         recommendation="Selected" if score >= 75 else "Rejected",
                         owner_id=current_user.id
                     )
 
                     db.session.add(resume_result)
-                    db.session.flush()
+                    resume_objects.append(resume_result)
 
+                # Single bulk database commit for maximum speed
+                db.session.commit()
+
+                for i, rr in enumerate(resume_objects):
                     results.append((
                         file_names[i],
-                        score,
-                        ats_score,
-                        matched_skills,
-                        missing_skills,
-                        resume_result.id
+                        scores[i],
+                        ats_scores[i],
+                        matched_skills_list[i],
+                        missing_skills_list[i],
+                        rr.id
                     ))
-                    print("Saved:", file_names[i])
 
-                # Sort by score
+                # Sort by score descending
                 results.sort(key=lambda x: x[1], reverse=True)
-                db.session.commit()
-                print("Database committed successfully")
+                print("Analysis completed successfully in batch!")
 
         except Exception as e:
             db.session.rollback()
