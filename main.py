@@ -149,7 +149,15 @@ with app.app_context():
                     db.session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN owner_id INTEGER"))
         db.session.commit()
     except Exception as e:
+        db.session.rollback()
         print("Database startup notice:", e)
+
+
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    if exception:
+        db.session.rollback()
+    db.session.remove()
 
 
 # Helper function for safe redirect URLs
