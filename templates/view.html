@@ -59,7 +59,7 @@
 
                         <div class="progress-bar bg-success" style="width: {{ data.match_score }}%;">
 
-                            {{ data.match_score }}%
+                            {{ '%.3f'|format(data.match_score) }}%
 
                         </div>
 
@@ -75,7 +75,7 @@
 
                         <div class="progress-bar bg-primary" style="width: {{ data.ats_score }}%;">
 
-                            {{ data.ats_score }}%
+                            {{ '%.3f'|format(data.ats_score) }}%
 
                         </div>
 
@@ -134,16 +134,11 @@
             </div>
 
             <div class="text-center mt-5">
-
-                <a href="/history" class="btn btn-primary">
-                    <a href="/interview/{{ data.id }}" class="btn btn-success me-3">
-
-                        AI Interview Assessment
-
-                    </a>
-
+                <a href="/interview/{{ data.id }}" class="btn btn-success me-2">
+                    AI Interview Assessment
+                </a>
+                <a href="/history" class="btn btn-outline-primary">
                     ← Back to History
-
                 </a>
 
             </div>

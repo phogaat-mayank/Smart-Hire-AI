@@ -25,12 +25,37 @@
 </head>
 
 <body>
-    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <div id="tsparticles"></div>
+    <div id="aiLoader" class="ai-loader" hidden>
+        <div class="loader-orb"><i class="bi bi-stars"></i></div>
+        <h3>Smart-Hire AI is working</h3>
+        <p>Analysing resumes and finding the strongest matches…</p>
+    </div>
 
     <div class="container">
+        <nav class="app-nav" aria-label="Primary navigation">
+            <a class="brand-link" href="/">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Smart-Hire AI logo">
+                <span>Smart-Hire AI</span>
+            </a>
+            <div class="nav-actions">
+                <a class="btn btn-light nav-button" href="/history">
+                    <i class="bi bi-clock-history"></i> History
+                </a>
+                <a class="btn btn-light nav-button" href="/interview-history">
+                    <i class="bi bi-bookmark-star"></i> Saved Answers
+                </a>
+                <a class="btn btn-primary nav-button" href="#interview-assistant">
+                    <i class="bi bi-chat-square-text"></i> Interview Questions
+                </a>
+                <button id="themeToggle" class="btn btn-light nav-button theme-toggle" type="button"
+                    aria-label="Toggle dark mode">
+                    <i class="bi bi-moon-stars-fill"></i>
+                </button>
+            </div>
+        </nav>
         <!-- ================= HERO SECTION ================= -->
 
         <section class="hero-section py-5">
@@ -86,7 +111,6 @@
                         <h3 class="fw-bold mb-4">
 
                             Upload Resume
-                            <a href="/history"> 📜History</a>
 
                         </h3>
 
@@ -140,6 +164,41 @@
 
         </section>
 
+        <section id="interview-assistant" class="interview-assistant" data-aos="fade-up">
+            <div class="interview-intro">
+                <span class="section-eyebrow"><i class="bi bi-lightning-charge-fill"></i> LIVE AI ASSISTANT</span>
+                <h2>Ask all your interview questions at once</h2>
+                <p>Select a screened candidate, paste as many questions as you need, and receive an answer for each one.
+                </p>
+            </div>
+            <div class="interview-workspace">
+                <div class="mb-3">
+                    <label for="candidateSelect" class="form-label">Candidate</label>
+                    <select id="candidateSelect" class="form-select" {% if not candidates %}disabled{% endif %}>
+                        <option value="">{% if candidates %}Select a candidate{% else %}Upload and analyze a resume
+                            first{% endif %}</option>
+                        {% for candidate in candidates %}
+                        <option value="{{ candidate.id }}">{{ candidate.candidate_name }} · ATS {{ candidate.ats_score
+                            }}%</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <label for="interviewQuestion" class="form-label">Interview questions</label>
+                <div class="question-composer">
+                    <textarea id="interviewQuestion" class="form-control" rows="5" {% if not candidates %}disabled{%
+                        endif %}
+                        placeholder="Write one question per line:&#10;What evidence shows Python experience?&#10;Has the candidate worked with APIs?&#10;What skills are missing for this role?"></textarea>
+                    <button id="askQuestionBtn" class="btn btn-primary" type="button" {% if not candidates %}disabled{%
+                        endif %}>
+                        <i class="bi bi-send-fill"></i> Get Answers
+                    </button>
+                </div>
+                <p class="assistant-note"><i class="bi bi-shield-check"></i> Add one question per line. Every answer is
+                    saved automatically and only uses the selected resume and job description.</p>
+                <div id="interviewAnswer" class="live-answer" aria-live="polite" hidden></div>
+            </div>
+        </section>
+
         {% if results %}
 
         <section id="results" class="mt-5">
@@ -148,7 +207,7 @@
                 Resume Analysis Dashboard
             </h2>
 
-            {% for file, score, ats_score, skills, missing in results %}
+            {% for file, score, ats_score, skills, missing, report_id in results %}
 
 
             <div class="candidate-summary dashboard-card mb-4">
@@ -221,7 +280,7 @@
 
                     </div>
 
-                    <h2 class="display-5 fw-bold text-primary">{{ score }}%</h2>
+                    <h2 class="display-5 fw-bold text-primary">{{ '%.3f'|format(score) }}%</h2>
 
                     <div class="progress mt-3">
 
@@ -251,7 +310,7 @@
 
                     </div>
 
-                    <h2 class="display-5 fw-bold text-success">{{ ats_score }}%</h2>
+                    <h2 class="display-5 fw-bold text-success">{{ '%.3f'|format(ats_score) }}%</h2>
 
                     <div class="progress mt-3">
 
@@ -418,13 +477,12 @@
                 {% endif %}
 
             </div>
+
             <div class="text-center mt-4">
-
-                <button class="btn btn-primary btn-lg px-5">
+                <a href="/report/{{ report_id }}" class="btn btn-primary btn-lg px-5">
                     <i class="bi bi-download me-2"></i>
-                    Download Report (Coming Soon)
-                </button>
-
+                    Download Report
+                </a>
             </div>
 
             <hr class="my-5">

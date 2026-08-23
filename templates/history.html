@@ -47,7 +47,7 @@
 
                         <h6>Average ATS</h6>
 
-                        <h2>{{ average_ats }}%</h2>
+                        <h2>{{ '%.3f'|format(average_ats) }}%</h2>
                     </div>
 
                 </div>
@@ -61,7 +61,7 @@
 
                         <h6>Best Match</h6>
 
-                        <h2>{{ highest_match }}%</h2>
+                        <h2>{{ '%.3f'|format(highest_match) }}%</h2>
                     </div>
 
                 </div>
@@ -117,9 +117,9 @@
 
                     <td>{{ item.filename }}</td>
 
-                    <td>{{ item.match_score }}%</td>
+                    <td>{{ '%.3f'|format(item.match_score) }}%</td>
 
-                    <td>{{ item.ats_score }}%</td>
+                    <td>{{ '%.3f'|format(item.ats_score) }}%</td>
 
                     <td>{{ item.created_at.strftime("%d-%m-%Y %H:%M") }}</td>
 
