@@ -38,6 +38,16 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import func, inspect, text
 from werkzeug.security import check_password_hash, generate_password_hash
+import numpy as np
+
+try:
+    import psycopg2.extensions
+    psycopg2.extensions.register_adapter(np.float32, psycopg2.extensions.Float)
+    psycopg2.extensions.register_adapter(np.float64, psycopg2.extensions.Float)
+    psycopg2.extensions.register_adapter(np.int32, psycopg2.extensions.AsIs)
+    psycopg2.extensions.register_adapter(np.int64, psycopg2.extensions.AsIs)
+except Exception:
+    pass
 
 app = Flask(__name__)
 load_dotenv()
@@ -587,7 +597,7 @@ def index():
                         [jd_embedding]
                     )
 
-                    score = round(similarity[0][0] * 100, 3)
+                    score = float(round(float(similarity[0][0]) * 100, 3))
                     resume_text_lower = resume_texts[i].lower()
 
                     matched_skills = [
@@ -599,9 +609,9 @@ def index():
                         skill for skill in jd_skills
                         if skill not in matched_skills
                     ]
-                    ats_score = round((score * 0.7) + (len(matched_skills) * 3), 3)
-                    if ats_score > 100:
-                        ats_score = 100
+                    ats_score = float(round((score * 0.7) + (len(matched_skills) * 3), 3))
+                    if ats_score > 100.0:
+                        ats_score = 100.0
 
                     print("Generating AI Summary...")
                     summary = generate_resume_summary(resume_texts[i])
