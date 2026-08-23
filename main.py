@@ -36,7 +36,7 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
-from sqlalchemy import func, text
+from sqlalchemy import func, inspect, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
@@ -52,8 +52,12 @@ print("Loading BERT model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
 print("BERT model loaded successfully!")
 
-# Database Config
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///results.db'
+# Database Config (Dynamic: PostgreSQL for Cloud, SQLite for Local)
+database_url = os.getenv("DATABASE_URL", "sqlite:///results.db")
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -125,14 +129,16 @@ class InterviewSession(db.Model):
 with app.app_context():
     db.create_all()
     # Lightweight migration for databases created before user accounts existed.
-    for table_name in ("resume_result", "job_description", "interview_session"):
-        try:
-            columns = {row[1] for row in db.session.execute(text(f"PRAGMA table_info({table_name})"))}
-            if "owner_id" not in columns:
-                db.session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN owner_id INTEGER"))
-        except Exception as e:
-            print(f"Migration notice for {table_name}:", e)
-    db.session.commit()
+    try:
+        inspector = inspect(db.engine)
+        for table_name in ("resume_result", "job_description", "interview_session"):
+            if inspector.has_table(table_name):
+                columns = {col["name"] for col in inspector.get_columns(table_name)}
+                if "owner_id" not in columns:
+                    db.session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN owner_id INTEGER"))
+        db.session.commit()
+    except Exception as e:
+        print("Migration notice:", e)
 
 
 # Helper function for safe redirect URLs
@@ -805,7 +811,7 @@ def interview(id):
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 7860 if os.getenv("SPACE_ID") else 5000))
     print("\n" + "=" * 55)
     print("  🚀 Smart-Hire AI Server is Running!")
     print(f"  👉 Open in your browser: http://127.0.0.1:{port}")

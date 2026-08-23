@@ -11,3 +11,4 @@ google-genai
 sentence-transformers
 scikit-learn
 reportlab
+psycopg2-binary
