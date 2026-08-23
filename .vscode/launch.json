@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Flask (Smart-Hire AI)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "flask",
+      "env": {
+        "FLASK_APP": "main.py",
+        "FLASK_DEBUG": "1"
+      },
+      "args": [
+        "run",
+        "--host=127.0.0.1",
+        "--port=5000"
+      ],
+      "jinja": true,
+      "autoForwardConsole": true
+    },
+    {
+      "name": "Python: Run main.py directly",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal"
+    }
+  ]
+}

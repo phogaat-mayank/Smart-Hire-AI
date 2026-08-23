@@ -17,6 +17,7 @@ from flask import (
     send_file,
     url_for,
 )
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -35,7 +36,7 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
-from sqlalchemy import text
+from sqlalchemy import func, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
@@ -139,6 +140,24 @@ def is_safe_url(target):
     if not target:
         return False
     return target.startswith("/") and not target.startswith("//") and not target.startswith("/\\")
+
+
+def get_reset_serializer():
+    return URLSafeTimedSerializer(app.config["SECRET_KEY"])
+
+
+def generate_reset_token(email):
+    serializer = get_reset_serializer()
+    return serializer.dumps(email, salt="smart-hire-password-reset")
+
+
+def verify_reset_token(token, expiration=3600):
+    serializer = get_reset_serializer()
+    try:
+        email = serializer.loads(token, salt="smart-hire-password-reset", max_age=expiration)
+        return email
+    except (SignatureExpired, BadSignature, Exception):
+        return None
 
 
 # Skills List
@@ -372,7 +391,7 @@ def register():
             flash("Passwords do not match.", "danger")
             return render_template("register.html", name=name, email=email)
 
-        existing_user = User.query.filter_by(email=email).first()
+        existing_user = User.query.filter(func.lower(User.email) == email).first()
         if existing_user:
             flash("An account with this email already exists. Please log in.", "warning")
             return redirect(url_for("login"))
@@ -406,7 +425,7 @@ def login():
             flash("Please provide both email and password.", "danger")
             return render_template("login.html", email=email)
 
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter(func.lower(User.email) == email).first()
         if user and check_password_hash(user.password_hash, password):
             login_user(user, remember=remember)
             flash(f"Welcome back, {user.name}!", "success")
@@ -427,6 +446,69 @@ def logout():
     logout_user()
     flash("You have been signed out successfully.", "info")
     return redirect(url_for("login"))
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    reset_url = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        if not email or not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
+            flash("Please enter a valid email address.", "danger")
+            return render_template("forgot_password.html", email=email)
+
+        user = User.query.filter(func.lower(User.email) == email).first()
+        if user:
+            token = generate_reset_token(user.email)
+            reset_url = url_for("reset_password", token=token)
+            flash("Password reset link has been generated! Use the link below to set a new password.", "success")
+        else:
+            flash("No account found with this email address. Please check your email or register.", "warning")
+
+        return render_template("forgot_password.html", email=email, reset_url=reset_url)
+
+    return render_template("forgot_password.html")
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    email = verify_reset_token(token)
+    if not email:
+        flash("The password reset link is invalid or has expired. Please request a new one.", "danger")
+        return redirect(url_for("forgot_password"))
+
+    user = User.query.filter(func.lower(User.email) == email.lower()).first()
+    if not user:
+        flash("User account not found. Please register or try again.", "danger")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if len(password) < 6:
+            flash("Password must be at least 6 characters long.", "danger")
+            return render_template("reset_password.html", token=token, email=email)
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return render_template("reset_password.html", token=token, email=email)
+
+        user.password_hash = generate_password_hash(password)
+        db.session.add(user)
+        db.session.commit()
+
+        login_user(user)
+        flash("Your password has been successfully reset! You are now signed in.", "success")
+        return redirect(url_for("index"))
+
+    return render_template("reset_password.html", token=token, email=email)
 
 
 # ================= MAIN APPLICATION ROUTES =================
@@ -724,4 +806,9 @@ def interview(id):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    print("\n" + "=" * 55)
+    print("  🚀 Smart-Hire AI Server is Running!")
+    print(f"  👉 Open in your browser: http://127.0.0.1:{port}")
+    print("=" * 55 + "\n")
+    app.run(host="0.0.0.0", port=port, debug=False)
+

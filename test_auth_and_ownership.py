@@ -3,8 +3,8 @@ import unittest
 from datetime import datetime
 from werkzeug.security import generate_password_hash
 
-# Import app, db, and models from main
-from main import app, db, User, ResumeResult, JobDescription, InterviewSession
+# Import app, db, models, and reset helpers from main
+from main import app, db, User, ResumeResult, JobDescription, InterviewSession, generate_reset_token, verify_reset_token
 
 
 class AuthAndOwnershipTestCase(unittest.TestCase):
@@ -352,6 +352,78 @@ class AuthAndOwnershipTestCase(unittest.TestCase):
         self.assertEqual(resp2.status_code, 404)
         self.logout()
 
+    def test_forgot_password_flow(self):
+        """Test forgot password request and token generation."""
+        # 1. GET forgot-password page
+        resp = self.client.get("/forgot-password")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Forgot Password", resp.data)
+
+        # 2. POST with non-existent email
+        resp = self.client.post("/forgot-password", data={"email": "nobody@nowhere.com"}, follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"No account found with this email", resp.data)
+
+        # 3. POST with valid existing user email
+        resp = self.client.post("/forgot-password", data={"email": "alice@company.com"}, follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Password reset link has been generated", resp.data)
+        self.assertIn(b"/reset-password/", resp.data)
+
+    def test_reset_password_invalid_token(self):
+        """Test reset password with invalid or tampered token."""
+        resp = self.client.get("/reset-password/invalid-token-12345", follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"invalid or has expired", resp.data)
+
+    def test_reset_password_success_and_login(self):
+        """Test resetting password successfully and logging in with the new password."""
+        token = generate_reset_token("alice@company.com")
+        self.assertIsNotNone(token)
+        self.assertEqual(verify_reset_token(token), "alice@company.com")
+
+        # GET reset password page with valid token
+        resp = self.client.get(f"/reset-password/{token}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Set New Password", resp.data)
+        self.assertIn(b"alice@company.com", resp.data)
+
+        # POST with password mismatch
+        resp = self.client.post(f"/reset-password/{token}", data={
+            "password": "brandnewpassword1",
+            "confirm_password": "differentpassword"
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Passwords do not match", resp.data)
+
+        # POST with short password
+        resp = self.client.post(f"/reset-password/{token}", data={
+            "password": "123",
+            "confirm_password": "123"
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Password must be at least 6 characters", resp.data)
+
+        # POST with valid matching password -> auto-logs in
+        resp = self.client.post(f"/reset-password/{token}", data={
+            "password": "brandnewpassword1",
+            "confirm_password": "brandnewpassword1"
+        }, follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"successfully reset", resp.data)
+
+        # Alice logs out and logs in again with her new password -> SUCCESS
+        self.logout()
+        login_resp = self.login("alice@company.com", "brandnewpassword1")
+        self.assertEqual(login_resp.status_code, 200)
+        self.assertIn(b"Welcome back, Alice Recruiter!", login_resp.data)
+
+        # Old password no longer works
+        self.logout()
+        fail_resp = self.login("alice@company.com", "password123")
+        self.assertIn(b"Invalid email or password", fail_resp.data)
+
 
 if __name__ == "__main__":
     unittest.main()
+
