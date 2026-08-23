@@ -43,9 +43,13 @@ app = Flask(__name__)
 load_dotenv()
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or "smart-hire-ai-secure-secret-key-2026"
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+gemini_key = os.getenv("GEMINI_API_KEY")
+client = None
+if gemini_key:
+    try:
+        client = genai.Client(api_key=gemini_key)
+    except Exception as e:
+        print("Gemini client initialization warning:", e)
 
 # Load BERT Model
 print("Loading BERT model...")
@@ -59,6 +63,14 @@ if database_url.startswith("postgres://"):
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+if database_url.startswith("postgresql"):
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': 5,
+        'max_overflow': 10,
+        'pool_pre_ping': True,
+        'pool_recycle': 280,
+    }
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -262,6 +274,9 @@ def build_candidate_report(candidate):
 
 
 def generate_resume_summary(resume_text):
+    if not client:
+        return "AI summary is temporarily unavailable (Gemini API key not configured)."
+
     prompt = f"""
 You are an HR Recruiter.
 
@@ -270,21 +285,15 @@ Read the resume and write a professional summary in exactly 4 concise bullet poi
 Resume:
 {resume_text}
 """
-    for attempt in range(3):
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                contents=prompt
-            )
-            return response.text
-        except Exception as e:
-            print("Gemini Error:", e)
-            if attempt < 2:
-                print("Retrying...")
-                time.sleep(3)
-
-    print("Gemini unavailable. Using fallback summary.")
-    return "AI summary is temporarily unavailable."
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception as e:
+        print("Gemini summary error:", e)
+        return "AI summary is temporarily unavailable."
 
 
 def load_interview_questions():
@@ -534,9 +543,6 @@ def index():
                 flash("Please enter a job description to screen resumes against.", "danger")
                 candidates = ResumeResult.query.filter_by(owner_id=current_user.id).order_by(ResumeResult.created_at.desc()).all()
                 return render_template("index.html", results=results, candidates=candidates)
-
-            # Ensure tables exist in database
-            db.create_all()
 
             jd = JobDescription(
                 job_description=job_description,

@@ -22,5 +22,5 @@ COPY . .
 # Default exposed port
 EXPOSE 7860
 
-# Start app with dynamic shell port expansion (defaults to 7860 or $PORT if provided by Railway/Render)
-CMD ["sh", "-c", "gunicorn main:app --bind 0.0.0.0:${PORT:-7860} --timeout 120 --workers 1"]
+# Start app with dynamic shell port expansion and multi-threading for blazing fast responses
+CMD ["sh", "-c", "gunicorn main:app --bind 0.0.0.0:${PORT:-7860} --timeout 120 --workers 1 --threads 4"]
