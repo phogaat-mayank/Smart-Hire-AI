@@ -194,15 +194,17 @@ def extract_jd_skills(job_description):
 
 # Function to Extract Text from PDF
 def extract_text_from_pdf(file):
-    reader = PyPDF2.PdfReader(file)
-    text = ""
-
-    for page in reader.pages:
-        page_text = page.extract_text()
-        if page_text:
-            text += page_text
-
-    return text
+    try:
+        reader = PyPDF2.PdfReader(file)
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text
+        return text
+    except Exception as e:
+        print("PDF extraction error:", e)
+        return ""
 
 
 def build_candidate_report(candidate):
@@ -524,96 +526,107 @@ def index():
     results = []
 
     if request.method == "POST":
-        resume_files = request.files.getlist("resume")
-        job_description = request.form.get("job_description", "").strip()
+        try:
+            resume_files = request.files.getlist("resume")
+            job_description = request.form.get("job_description", "").strip()
 
-        if not job_description:
-            flash("Please enter a job description to screen resumes against.", "danger")
-            candidates = ResumeResult.query.filter_by(owner_id=current_user.id).order_by(ResumeResult.created_at.desc()).all()
-            return render_template("index.html", results=results, candidates=candidates)
+            if not job_description:
+                flash("Please enter a job description to screen resumes against.", "danger")
+                candidates = ResumeResult.query.filter_by(owner_id=current_user.id).order_by(ResumeResult.created_at.desc()).all()
+                return render_template("index.html", results=results, candidates=candidates)
 
-        jd = JobDescription(
-            job_description=job_description,
-            owner_id=current_user.id
-        )
-        db.session.add(jd)
-        db.session.commit()
-        jd_skills = extract_jd_skills(job_description)
+            # Ensure tables exist in database
+            db.create_all()
 
-        resume_texts = []
-        file_names = []
-
-        # Extract text from all resumes
-        for file in resume_files:
-            if not file or not file.filename:
-                continue
-            resume_text = extract_text_from_pdf(file)
-            if resume_text and resume_text.strip():
-                print(f"Processing: {file.filename}")
-                resume_texts.append(resume_text[:3000])
-                file_names.append(file.filename)
-
-        if resume_texts:
-            # Batch BERT Encoding
-            resume_embeddings = model.encode(resume_texts)
-            jd_embedding = model.encode(job_description)
-
-            # Process each resume
-            for i, resume_embedding in enumerate(resume_embeddings):
-                similarity = cosine_similarity(
-                    [resume_embedding],
-                    [jd_embedding]
-                )
-
-                score = round(similarity[0][0] * 100, 3)
-                resume_text_lower = resume_texts[i].lower()
-
-                matched_skills = [
-                    skill for skill in jd_skills
-                    if skill in resume_text_lower
-                ]
-
-                missing_skills = [
-                    skill for skill in jd_skills
-                    if skill not in matched_skills
-                ]
-                ats_score = round((score * 0.7) + (len(matched_skills) * 3), 3)
-                if ats_score > 100:
-                    ats_score = 100
-
-                results.append((
-                    file_names[i],
-                    score,
-                    ats_score,
-                    matched_skills,
-                    missing_skills
-                ))
-                print("Generating AI Summary...")
-                summary = generate_resume_summary(resume_texts[i])
-                print("Summary Generated Successfully!")
-
-                resume_result = ResumeResult(
-                    candidate_name=file_names[i].replace(".pdf", ""),
-                    filename=file_names[i],
-                    match_score=score,
-                    ats_score=ats_score,
-                    matched_skills=", ".join(matched_skills),
-                    missing_skills=", ".join(missing_skills),
-                    resume_summary=summary,
-                    resume_text=resume_texts[i],
-                    recommendation="Selected" if score >= 75 else "Rejected",
-                    owner_id=current_user.id
-                )
-
-                db.session.add(resume_result)
-                db.session.flush()
-                results[-1] = (*results[-1], resume_result.id)
-                print("Saved:", file_names[i])
-
-            # Sort by score
-            results.sort(key=lambda x: x[1], reverse=True)
+            jd = JobDescription(
+                job_description=job_description,
+                owner_id=current_user.id
+            )
+            db.session.add(jd)
             db.session.commit()
-            print("Database committed successfully")
+            jd_skills = extract_jd_skills(job_description)
+
+            resume_texts = []
+            file_names = []
+
+            # Extract text from all resumes
+            for file in resume_files:
+                if not file or not file.filename:
+                    continue
+                resume_text = extract_text_from_pdf(file)
+                if resume_text and resume_text.strip():
+                    print(f"Processing: {file.filename}")
+                    resume_texts.append(resume_text[:3000])
+                    file_names.append(file.filename)
+
+            if not resume_texts:
+                flash("No readable text found in the uploaded resume(s). Please upload text-based PDFs.", "warning")
+            else:
+                # Batch BERT Encoding
+                resume_embeddings = model.encode(resume_texts)
+                jd_embedding = model.encode(job_description)
+
+                # Process each resume
+                for i, resume_embedding in enumerate(resume_embeddings):
+                    similarity = cosine_similarity(
+                        [resume_embedding],
+                        [jd_embedding]
+                    )
+
+                    score = round(similarity[0][0] * 100, 3)
+                    resume_text_lower = resume_texts[i].lower()
+
+                    matched_skills = [
+                        skill for skill in jd_skills
+                        if skill in resume_text_lower
+                    ]
+
+                    missing_skills = [
+                        skill for skill in jd_skills
+                        if skill not in matched_skills
+                    ]
+                    ats_score = round((score * 0.7) + (len(matched_skills) * 3), 3)
+                    if ats_score > 100:
+                        ats_score = 100
+
+                    results.append((
+                        file_names[i],
+                        score,
+                        ats_score,
+                        matched_skills,
+                        missing_skills
+                    ))
+                    print("Generating AI Summary...")
+                    summary = generate_resume_summary(resume_texts[i])
+                    print("Summary Generated Successfully!")
+
+                    resume_result = ResumeResult(
+                        candidate_name=file_names[i].replace(".pdf", ""),
+                        filename=file_names[i],
+                        match_score=score,
+                        ats_score=ats_score,
+                        matched_skills=", ".join(matched_skills),
+                        missing_skills=", ".join(missing_skills),
+                        resume_summary=summary,
+                        resume_text=resume_texts[i],
+                        recommendation="Selected" if score >= 75 else "Rejected",
+                        owner_id=current_user.id
+                    )
+
+                    db.session.add(resume_result)
+                    db.session.flush()
+                    results[-1] = (*results[-1], resume_result.id)
+                    print("Saved:", file_names[i])
+
+                # Sort by score
+                results.sort(key=lambda x: x[1], reverse=True)
+                db.session.commit()
+                print("Database committed successfully")
+
+        except Exception as e:
+            db.session.rollback()
+            print("Error in resume analysis POST handler:", e)
+            flash(f"Error processing resumes: {e}", "danger")
 
     candidates = ResumeResult.query.filter_by(owner_id=current_user.id).order_by(ResumeResult.created_at.desc()).all()
     return render_template("index.html", results=results, candidates=candidates)
