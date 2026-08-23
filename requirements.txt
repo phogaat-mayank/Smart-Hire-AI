@@ -1,17 +1,10 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
-
 Flask
 Flask-SQLAlchemy
 Flask-Login
 gunicorn
-
 PyPDF2
 python-dotenv
-
 google-genai
-
-sentence-transformers
 scikit-learn
 reportlab
 psycopg2-binary

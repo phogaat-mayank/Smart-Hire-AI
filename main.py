@@ -34,8 +34,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
 from sqlalchemy import func, inspect, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -46,11 +46,6 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or "smart-hire-ai-secure-secr
 client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
-
-# Load BERT Model
-print("Loading BERT model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
-print("BERT model loaded successfully!")
 
 # Database Config (Dynamic: PostgreSQL for Cloud, SQLite for Local)
 database_url = os.getenv("DATABASE_URL", "sqlite:///results.db")
@@ -555,18 +550,18 @@ def index():
                 file_names.append(file.filename)
 
         if resume_texts:
-            # Batch BERT Encoding
-            resume_embeddings = model.encode(resume_texts)
-            jd_embedding = model.encode(job_description)
+            # TF-IDF Vectorization for high-efficiency, lightweight cosine similarity
+            vectorizer = TfidfVectorizer(stop_words="english")
+            all_texts = [job_description] + resume_texts
+            tfidf_matrix = vectorizer.fit_transform(all_texts)
+            jd_vector = tfidf_matrix[0:1]
+            resume_vectors = tfidf_matrix[1:]
+            similarity_scores = cosine_similarity(resume_vectors, jd_vector)
 
             # Process each resume
-            for i, resume_embedding in enumerate(resume_embeddings):
-                similarity = cosine_similarity(
-                    [resume_embedding],
-                    [jd_embedding]
-                )
-
-                score = round(similarity[0][0] * 100, 3)
+            for i in range(len(resume_texts)):
+                raw_similarity = similarity_scores[i][0]
+                score = round(float(raw_similarity) * 100, 3)
                 resume_text_lower = resume_texts[i].lower()
 
                 matched_skills = [
