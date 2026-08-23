@@ -127,9 +127,8 @@ class InterviewSession(db.Model):
 
 
 with app.app_context():
-    db.create_all()
-    # Lightweight migration for databases created before user accounts existed.
     try:
+        db.create_all()
         inspector = inspect(db.engine)
         for table_name in ("resume_result", "job_description", "interview_session"):
             if inspector.has_table(table_name):
@@ -138,7 +137,7 @@ with app.app_context():
                     db.session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN owner_id INTEGER"))
         db.session.commit()
     except Exception as e:
-        print("Migration notice:", e)
+        print("Database startup notice:", e)
 
 
 # Helper function for safe redirect URLs
