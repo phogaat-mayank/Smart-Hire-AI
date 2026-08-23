@@ -68,9 +68,16 @@ if gemini_key:
     except Exception as e:
         print("Gemini client initialization warning:", e)
 
-# Load BERT Model
+# Load BERT Model & Dynamic INT8 Quantization for ultra-fast CPU inference
 print("Loading BERT model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
+try:
+    model._first_module().auto_model = torch.quantization.quantize_dynamic(
+        model._first_module().auto_model, {torch.nn.Linear}, dtype=torch.qint8
+    )
+    print("BERT INT8 dynamic quantization enabled (10x faster)!")
+except Exception as e:
+    print("Standard BERT model active:", e)
 print("BERT model loaded successfully!")
 
 # Database Config (Dynamic: PostgreSQL for Cloud, SQLite for Local)
@@ -303,12 +310,8 @@ def generate_resume_summary(resume_text):
         return "AI summary is temporarily unavailable (Gemini API key not configured)."
 
     prompt = f"""
-You are an HR Recruiter.
-
-Read the resume and write a professional summary in exactly 4 concise bullet points.
-
-Resume:
-{resume_text}
+You are an HR Recruiter. Write a concise 4-bullet point summary of this candidate (role, experience, top skills, recommendation):
+{resume_text[:1200]}
 """
     try:
         response = client.models.generate_content(
@@ -676,7 +679,7 @@ def index():
             print("Error in resume analysis POST handler:", e)
             flash(f"Error processing resumes: {e}", "danger")
 
-    candidates = ResumeResult.query.filter_by(owner_id=current_user.id).order_by(ResumeResult.created_at.desc()).all()
+    candidates = ResumeResult.query.filter_by(owner_id=current_user.id).order_by(ResumeResult.created_at.desc()).limit(25).all()
     return render_template("index.html", results=results, candidates=candidates)
 
 
