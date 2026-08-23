@@ -19,8 +19,8 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # Copy application files
 COPY . .
 
-# Hugging Face Spaces default port
+# Default exposed port
 EXPOSE 7860
 
-# Start app with Gunicorn
-CMD ["gunicorn", "main:app", "--bind", "0.0.0.0:7860", "--timeout", "120", "--workers", "2"]
+# Start app with dynamic shell port expansion (defaults to 7860 or $PORT if provided by Railway/Render)
+CMD ["sh", "-c", "gunicorn main:app --bind 0.0.0.0:${PORT:-7860} --timeout 120 --workers 1"]
