@@ -163,17 +163,6 @@ body {
 .answer-card h6 { color: #1e3a8a; font-weight: 700; line-height: 1.5; }
 .answer-card p { white-space: pre-line; }
 
-body.dark-theme { background: radial-gradient(circle at top right, #172554 0, transparent 32%), #0f172a; color: #e2e8f0; }
-.dark-theme .brand-link, .dark-theme .text-muted { color: #cbd5e1 !important; }
-.dark-theme .upload-card, .dark-theme .dashboard-card, .dark-theme .score-card, .dark-theme .interview-workspace { background: #172033; color: #e2e8f0; border-color: #334155; }
-.dark-theme .form-control, .dark-theme .form-select { color: #e2e8f0; background: #0f172a; border-color: #475569; }
-.dark-theme .form-control::placeholder { color: #94a3b8; }
-.dark-theme .feature-pill, .dark-theme .nav-button.btn-light, .dark-theme .answer-card { background: #1e293b; color: #e2e8f0; }
-.dark-theme .live-answer { background: #172554; border-color: #3b82f6; }
-.dark-theme .live-answer h5, .dark-theme .answer-card h6 { color: #bfdbfe; }
-.dark-theme .assistant-note, .dark-theme .live-answer p:last-child { color: #cbd5e1; }
-
-
 /* ===========================
    INPUTS
 =========================== */
@@ -372,13 +361,143 @@ body.dark-theme { background: radial-gradient(circle at top right, #172554 0, tr
     color: #dc2626;
 }
 
-.badge {
-    border-radius: 30px;
-    font-weight: 500;
-}
-
 .logo {
     width: 70px;
     height: 70px;
     object-fit: contain;
+}
+
+/* ===========================
+   AUTHENTICATION & PROFILE
+=========================== */
+
+.auth-body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.min-vh-75 {
+    min-height: 75vh;
+}
+
+.auth-card {
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 40px;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.auth-icon-badge {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: #eff6ff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.auth-submit-btn {
+    border-radius: 12px;
+    font-size: 1rem;
+    letter-spacing: 0.3px;
+    transition: all 0.25s ease;
+}
+
+.auth-submit-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.25);
+}
+
+.user-profile-badge {
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #1e293b;
+}
+
+.user-avatar-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.82rem;
+}
+
+/* ===========================
+   DARK THEME STYLING
+=========================== */
+
+body.dark-theme {
+    background: radial-gradient(circle at top right, #172554 0, transparent 32%), #0f172a;
+    color: #e2e8f0;
+}
+
+.dark-theme .brand-link,
+.dark-theme .text-muted {
+    color: #cbd5e1 !important;
+}
+
+.dark-theme .upload-card,
+.dark-theme .dashboard-card,
+.dark-theme .score-card,
+.dark-theme .auth-card,
+.dark-theme .interview-workspace,
+.dark-theme .user-profile-badge {
+    background: #172033;
+    color: #e2e8f0;
+    border-color: #334155;
+}
+
+.dark-theme .form-control,
+.dark-theme .form-select,
+.dark-theme .input-group-text {
+    background-color: #0f172a;
+    border-color: #475569;
+    color: #e2e8f0;
+}
+
+.dark-theme .form-control:focus,
+.dark-theme .form-select:focus {
+    background-color: #0f172a;
+    border-color: #3b82f6;
+    color: #ffffff;
+}
+
+.dark-theme .form-control::placeholder {
+    color: #94a3b8;
+}
+
+.dark-theme .feature-pill,
+.dark-theme .nav-button.btn-light,
+.dark-theme .answer-card {
+    background: #1e293b;
+    color: #e2e8f0;
+}
+
+.dark-theme .live-answer {
+    background: #172554;
+    border-color: #3b82f6;
+}
+
+.dark-theme .live-answer h5,
+.dark-theme .answer-card h6 {
+    color: #bfdbfe;
+}
+
+.dark-theme .assistant-note,
+.dark-theme .live-answer p:last-child {
+    color: #cbd5e1;
+}
+
+.dark-theme .auth-icon-badge {
+    background: #1e293b;
 }

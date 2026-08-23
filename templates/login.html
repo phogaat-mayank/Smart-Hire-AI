@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In · Smart-Hire AI</title>
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- AOS Animation -->
+    <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet">
+
+    <!-- Main CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body class="auth-body">
+    <div id="tsparticles"></div>
+
+    <div class="container py-4">
+        <nav class="app-nav mb-4" aria-label="Auth navigation">
+            <a class="brand-link" href="/">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Smart-Hire AI logo">
+                <span>Smart-Hire AI</span>
+            </a>
+            <div class="nav-actions">
+                <button id="themeToggle" class="btn btn-light nav-button theme-toggle" type="button"
+                    aria-label="Toggle dark mode">
+                    <i class="bi bi-moon-stars-fill"></i>
+                </button>
+            </div>
+        </nav>
+
+        <div class="row justify-content-center align-items-center min-vh-75">
+            <div class="col-12 col-sm-10 col-md-8 col-lg-5" data-aos="fade-up">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="mb-4">
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category if category != 'error' else 'danger' }} alert-dismissible fade show shadow-sm" role="alert">
+                        <i class="bi {{ 'bi-check-circle-fill' if category == 'success' else ('bi-info-circle-fill' if category == 'info' else 'bi-exclamation-triangle-fill') }} me-2"></i>
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                <div class="auth-card shadow-lg">
+                    <div class="text-center mb-4">
+                        <div class="auth-icon-badge mb-3">
+                            <i class="bi bi-person-lock fs-1 text-primary"></i>
+                        </div>
+                        <h2 class="fw-bold mb-1">Welcome Back</h2>
+                        <p class="text-muted">Sign in to access your resumes and reports</p>
+                    </div>
+
+                    <form method="POST" action="/login{% if request.args.get('next') %}?next={{ request.args.get('next')|urlencode }}{% endif %}" novalidate>
+                        <div class="mb-3">
+                            <label for="email" class="form-label fw-semibold">Email address</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control" id="email" name="email"
+                                    value="{{ email if email else '' }}" placeholder="name@company.com" required autocomplete="email" autofocus>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label fw-semibold">Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-key"></i></span>
+                                <input type="password" class="form-control" id="password" name="password"
+                                    placeholder="Enter your password" required autocomplete="current-password">
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="remember" name="remember" checked>
+                                <label class="form-check-label text-muted" for="remember">
+                                    Remember me
+                                </label>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 py-3 fw-bold auth-submit-btn">
+                            <i class="bi bi-box-arrow-in-right me-2"></i> Sign In
+                        </button>
+                    </form>
+
+                    <div class="text-center mt-4 pt-2 border-top">
+                        <p class="text-muted mb-0">Don't have an account?
+                            <a href="/register" class="fw-semibold text-primary text-decoration-none">Create one</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>

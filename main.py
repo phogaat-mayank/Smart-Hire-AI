@@ -1,26 +1,46 @@
-from urllib import response
 import json
+import os
 import re
 import time
+from datetime import datetime
 from io import BytesIO
 from xml.sax.saxutils import escape
-from flask import Flask, render_template, request, redirect, jsonify, send_file
-import PyPDF2
-from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-from google import genai
+
 from dotenv import load_dotenv
-import os
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from flask_sqlalchemy import SQLAlchemy
+from google import genai
+import PyPDF2
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
+from sqlalchemy import text
+from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
 load_dotenv()
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or "smart-hire-ai-secure-secret-key-2026"
 
 client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
@@ -36,8 +56,30 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///results.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+login_manager.login_message = "Please log in to access this page."
+login_manager.login_message_category = "info"
 
-# Database Table
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    resumes = db.relationship("ResumeResult", backref="owner", lazy=True, cascade="all, delete-orphan")
+    job_descriptions = db.relationship("JobDescription", backref="owner", lazy=True, cascade="all, delete-orphan")
+    interview_sessions = db.relationship("InterviewSession", backref="owner", lazy=True, cascade="all, delete-orphan")
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, int(user_id))
+
+
+# Database Tables
 class ResumeResult(db.Model):
     id = db.Column(db.Integer, primary_key=True)
 
@@ -54,15 +96,16 @@ class ResumeResult(db.Model):
     recommendation = db.Column(db.String(50))
     resume_text = db.Column(db.Text)
     ai_interview = db.Column(db.Text)
+    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# Create Database
+
 class JobDescription(db.Model):
-    
     id = db.Column(db.Integer, primary_key=True)
 
     job_description = db.Column(db.Text)
+    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -72,12 +115,31 @@ class InterviewSession(db.Model):
     candidate_id = db.Column(db.Integer, db.ForeignKey("resume_result.id"), nullable=False)
     questions = db.Column(db.Text, nullable=False)
     answers = db.Column(db.Text, nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    candidate = db.relationship("ResumeResult", backref="interview_sessions")
+    candidate = db.relationship("ResumeResult", backref=db.backref("candidate_interview_sessions", cascade="all, delete-orphan"))
+
+
 with app.app_context():
     db.create_all()
-    
+    # Lightweight migration for databases created before user accounts existed.
+    for table_name in ("resume_result", "job_description", "interview_session"):
+        try:
+            columns = {row[1] for row in db.session.execute(text(f"PRAGMA table_info({table_name})"))}
+            if "owner_id" not in columns:
+                db.session.execute(text(f"ALTER TABLE {table_name} ADD COLUMN owner_id INTEGER"))
+        except Exception as e:
+            print(f"Migration notice for {table_name}:", e)
+    db.session.commit()
+
+
+# Helper function for safe redirect URLs
+def is_safe_url(target):
+    if not target:
+        return False
+    return target.startswith("/") and not target.startswith("//") and not target.startswith("/\\")
+
 
 # Skills List
 skills_list = [
@@ -92,10 +154,11 @@ skills_list = [
     "power bi", "excel", "tableau",
     "linux", "rest api"
 ]
+
+
 # Extract required skills from Job Description
 def extract_jd_skills(job_description):
     jd_text = job_description.lower()
-
     jd_skills = []
 
     for skill in skills_list:
@@ -104,15 +167,14 @@ def extract_jd_skills(job_description):
 
     return jd_skills
 
+
 # Function to Extract Text from PDF
 def extract_text_from_pdf(file):
     reader = PyPDF2.PdfReader(file)
-
     text = ""
 
     for page in reader.pages:
         page_text = page.extract_text()
-
         if page_text:
             text += page_text
 
@@ -173,10 +235,7 @@ def build_candidate_report(candidate):
     return buffer
 
 
-import time
-
 def generate_resume_summary(resume_text):
-
     prompt = f"""
 You are an HR Recruiter.
 
@@ -185,157 +244,27 @@ Read the resume and write a professional summary in exactly 4 concise bullet poi
 Resume:
 {resume_text}
 """
-
     for attempt in range(3):
-
         try:
-
             response = client.models.generate_content(
-               model="gemini-3.5-flash-lite",
+                model="gemini-3.5-flash-lite",
                 contents=prompt
             )
-
             return response.text
-
         except Exception as e:
-
             print("Gemini Error:", e)
-
             if attempt < 2:
                 print("Retrying...")
                 time.sleep(3)
 
     print("Gemini unavailable. Using fallback summary.")
-
     return "AI summary is temporarily unavailable."
 
 
 def load_interview_questions():
-
-    with open(
-        "questions/interview_questions.txt",
-        "r",
-        encoding="utf-8"
-    ) as file:
-
-        questions = []
-
-        for line in file:
-
-            line = line.strip()
-
-            if line:
-                questions.append(line)
-
+    with open("questions/interview_questions.txt", "r", encoding="utf-8") as file:
+        questions = [line.strip() for line in file if line.strip()]
     return questions
-
-
-def generate_ai_answers(resume_text, questions, job_description=""):
-
-    # Convert questions list into numbered text
-    questions_text = "\n".join(
-        f"{index}. {question}"
-        for index, question in enumerate(questions, start=1)
-    )
-
-    # Create the complete prompt
-    prompt = f"""
-You are an AI Recruitment Assistant.
-
-Your task is to answer the recruiter's questions ONLY using the information available in the candidate's resume and the job description.
-
-Rules:
-1. Do NOT make up information.
-2. If the answer is not found, write:
-   "Not mentioned in the resume."
-3. Quote evidence from the resume whenever possible.
-4. Keep answers professional.
-
-Job Description:
-{job_description}
-
-Resume:
-{resume_text}
-
-Interview Questions:
-{questions_text}
-
-Return ONLY valid JSON.
-
-Return a JSON array.
-
-Each object must have exactly these keys:
-
-[
-  {{
-    "question": "...",
-    "answer": "...",
-    "evidence": "...",
-    "status": "matched"
-  }}
-]
-
-Status Rules:
-- matched = Candidate fully satisfies the requirement.
-- partial = Candidate has related knowledge but not complete.
-- missing = Candidate does not satisfy the requirement.
-
-Do not include markdown.
-Do not include ```json.
-Do not include explanations.
-Only return valid JSON.
-"""
-
-    response = client.models.generate_content(
-        model="gemini-3.5-flash-lite",
-        contents=prompt
-    )
-
-    text = response.text.strip()
-
-    # Remove markdown if Gemini returns it
-    text = text.replace("```json", "")
-    text = text.replace("```", "")
-    text = text.strip()
-
-    return json.loads(text)
-
-
-def generate_interview_answer(resume_text, question, job_description=""):
-    """Answer one recruiter question using only the selected candidate's data."""
-    prompt = f"""
-You are an AI recruitment assistant. Answer the recruiter's question using ONLY the
-candidate resume and job description below. Do not invent facts. If the information
-is absent, say exactly: "Not mentioned in the resume."
-
-Job Description:
-{job_description}
-
-Candidate Resume:
-{resume_text}
-
-Recruiter Question:
-{question}
-
-Return only valid JSON with these keys:
-{{"answer": "...", "evidence": "...", "status": "matched|partial|missing"}}
-"""
-
-    try:
-        response = client.models.generate_content(
-            model="gemini-3.5-flash-lite",
-            contents=prompt
-        )
-        text = response.text.strip().replace("```json", "").replace("```", "").strip()
-        answer = json.loads(text)
-        return {
-            "answer": answer.get("answer", "Not mentioned in the resume."),
-            "evidence": answer.get("evidence", "No supporting evidence found."),
-            "status": answer.get("status", "missing")
-        }
-    except Exception as error:
-        print("Live interview answer error:", error)
-        return None
 
 
 def generate_interview_answers(resume_text, questions, job_description=""):
@@ -375,8 +304,8 @@ Return ONLY valid JSON array. Every item must have these keys:
                 model="gemini-3.5-flash-lite",
                 contents=prompt
             )
-            text = response.text.strip().replace("```json", "").replace("```", "").strip()
-            answers = json.loads(text)
+            text_resp = response.text.strip().replace("```json", "").replace("```", "").strip()
+            answers = json.loads(text_resp)
             if not isinstance(answers, list) or len(answers) != len(batch):
                 raise ValueError("Expected one answer for every question")
             for question, answer in zip(batch, answers):
@@ -398,14 +327,14 @@ Return ONLY valid JSON array. Every item must have these keys:
     return all_answers
 
 
-def is_valid_interview_question(text):
+def is_valid_interview_question(text_q):
     """Require an actual interview-style question instead of arbitrary text."""
-    normalized = re.sub(r"\s+", " ", text).strip()
+    normalized = re.sub(r"\s+", " ", text_q).strip()
     question_starters = (
         "what", "why", "when", "where", "who", "which", "how", "is ", "are ",
         "does", "do ", "can", "could", "would", "should", "will", "has", "have",
         "explain", "describe", "compare", "evaluate", "assess", "identify", "list",
-        "kya", "kyu", "kaise", "batao", "samjhao", "evaluate"
+        "kya", "kyu", "kaise", "batao", "samjhao"
     )
     return (
         len(normalized) >= 8
@@ -414,18 +343,112 @@ def is_valid_interview_question(text):
     )
 
 
-# Main Route
-@app.route("/", methods=["GET", "POST"])
-def index():
+# ================= AUTHENTICATION ROUTES =================
 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not name:
+            flash("Full name is required.", "danger")
+            return render_template("register.html", name=name, email=email)
+
+        if not email or not re.match(r"^[^@]+@[^@]+\.[^@]+$", email):
+            flash("Please enter a valid email address.", "danger")
+            return render_template("register.html", name=name, email=email)
+
+        if len(password) < 6:
+            flash("Password must be at least 6 characters long.", "danger")
+            return render_template("register.html", name=name, email=email)
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return render_template("register.html", name=name, email=email)
+
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
+            flash("An account with this email already exists. Please log in.", "warning")
+            return redirect(url_for("login"))
+
+        user = User(
+            name=name,
+            email=email,
+            password_hash=generate_password_hash(password)
+        )
+        db.session.add(user)
+        db.session.commit()
+
+        login_user(user)
+        flash(f"Welcome to Smart-Hire AI, {user.name}! Your account is ready.", "success")
+        return redirect(url_for("index"))
+
+    return render_template("register.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        remember = bool(request.form.get("remember"))
+
+        if not email or not password:
+            flash("Please provide both email and password.", "danger")
+            return render_template("login.html", email=email)
+
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user, remember=remember)
+            flash(f"Welcome back, {user.name}!", "success")
+            next_url = request.args.get("next")
+            if next_url and is_safe_url(next_url):
+                return redirect(next_url)
+            return redirect(url_for("index"))
+        else:
+            flash("Invalid email or password. Please try again.", "danger")
+            return render_template("login.html", email=email)
+
+    return render_template("login.html")
+
+
+@app.route("/logout", methods=["GET", "POST"])
+@login_required
+def logout():
+    logout_user()
+    flash("You have been signed out successfully.", "info")
+    return redirect(url_for("login"))
+
+
+# ================= MAIN APPLICATION ROUTES =================
+
+@app.route("/", methods=["GET", "POST"])
+@login_required
+def index():
     results = []
 
     if request.method == "POST":
-
         resume_files = request.files.getlist("resume")
-        job_description = request.form["job_description"]
-        jd = JobDescription(job_description=job_description)
+        job_description = request.form.get("job_description", "").strip()
 
+        if not job_description:
+            flash("Please enter a job description to screen resumes against.", "danger")
+            candidates = ResumeResult.query.filter_by(owner_id=current_user.id).order_by(ResumeResult.created_at.desc()).all()
+            return render_template("index.html", results=results, candidates=candidates)
+
+        jd = JobDescription(
+            job_description=job_description,
+            owner_id=current_user.id
+        )
         db.session.add(jd)
         db.session.commit()
         jd_skills = extract_jd_skills(job_description)
@@ -435,83 +458,82 @@ def index():
 
         # Extract text from all resumes
         for file in resume_files:
-
+            if not file or not file.filename:
+                continue
             resume_text = extract_text_from_pdf(file)
-
             if resume_text and resume_text.strip():
                 print(f"Processing: {file.filename}")
                 resume_texts.append(resume_text[:3000])
                 file_names.append(file.filename)
 
-        # Batch BERT Encoding
-        resume_embeddings = model.encode(resume_texts)
-        jd_embedding = model.encode(job_description)
+        if resume_texts:
+            # Batch BERT Encoding
+            resume_embeddings = model.encode(resume_texts)
+            jd_embedding = model.encode(job_description)
 
-        # Process each resume
-        for i, resume_embedding in enumerate(resume_embeddings):
+            # Process each resume
+            for i, resume_embedding in enumerate(resume_embeddings):
+                similarity = cosine_similarity(
+                    [resume_embedding],
+                    [jd_embedding]
+                )
 
-            similarity = cosine_similarity(
-                [resume_embedding],
-                [jd_embedding]
-            )
+                score = round(similarity[0][0] * 100, 3)
+                resume_text_lower = resume_texts[i].lower()
 
-            score = round(similarity[0][0] * 100, 3)
+                matched_skills = [
+                    skill for skill in jd_skills
+                    if skill in resume_text_lower
+                ]
 
-            resume_text_lower = resume_texts[i].lower()
+                missing_skills = [
+                    skill for skill in jd_skills
+                    if skill not in matched_skills
+                ]
+                ats_score = round((score * 0.7) + (len(matched_skills) * 3), 3)
+                if ats_score > 100:
+                    ats_score = 100
 
-            matched_skills = [
-                skill for skill in jd_skills
-                if skill in resume_text_lower
-            ]
+                results.append((
+                    file_names[i],
+                    score,
+                    ats_score,
+                    matched_skills,
+                    missing_skills
+                ))
+                print("Generating AI Summary...")
+                summary = generate_resume_summary(resume_texts[i])
+                print("Summary Generated Successfully!")
 
-            missing_skills = [
-                skill for skill in jd_skills
-                if skill not in matched_skills
-            ]
-            ats_score = round((score * 0.7) + (len(matched_skills) * 3), 3)
-            if ats_score > 100:
-                ats_score = 100
+                resume_result = ResumeResult(
+                    candidate_name=file_names[i].replace(".pdf", ""),
+                    filename=file_names[i],
+                    match_score=score,
+                    ats_score=ats_score,
+                    matched_skills=", ".join(matched_skills),
+                    missing_skills=", ".join(missing_skills),
+                    resume_summary=summary,
+                    resume_text=resume_texts[i],
+                    recommendation="Selected" if score >= 75 else "Rejected",
+                    owner_id=current_user.id
+                )
 
-            results.append((
-                file_names[i],
-                score,
-                ats_score,
-                matched_skills,
-                missing_skills
-            ))
-            print("Generating AI Summary...")
-            summary = generate_resume_summary(resume_texts[i])
-            print("Summary Generated Successfully!")
+                db.session.add(resume_result)
+                db.session.flush()
+                results[-1] = (*results[-1], resume_result.id)
+                print("Saved:", file_names[i])
 
-            resume_result = ResumeResult(
-                candidate_name=file_names[i].replace(".pdf", ""),
-                filename=file_names[i],
+            # Sort by score
+            results.sort(key=lambda x: x[1], reverse=True)
+            db.session.commit()
+            print("Database committed successfully")
 
-                match_score=score,
-                ats_score=ats_score,
-
-                matched_skills=", ".join(matched_skills),
-                missing_skills=", ".join(missing_skills),
-                resume_summary=summary,
-                resume_text=resume_texts[i],
-
-                recommendation="Selected" if score >= 75 else "Rejected"
-            )
-
-            db.session.add(resume_result)
-            db.session.flush()
-            results[-1] = (*results[-1], resume_result.id)
-            print("Saved:", file_names[i])
-
-        # Sort by score
-        results.sort(key=lambda x: x[1], reverse=True)
-        db.session.commit()
-        print("Database committed successfully")
-    candidates = ResumeResult.query.order_by(ResumeResult.created_at.desc()).all()
+    candidates = ResumeResult.query.filter_by(owner_id=current_user.id).order_by(ResumeResult.created_at.desc()).all()
     return render_template("index.html", results=results, candidates=candidates)
 
 
 @app.route("/api/interview-answer", methods=["POST"])
+@login_required
 def interview_answer():
     payload = request.get_json(silent=True) or {}
     candidate_id = payload.get("candidate_id")
@@ -531,11 +553,11 @@ def interview_answer():
             "invalid_questions": invalid_questions
         }), 400
 
-    candidate = db.session.get(ResumeResult, candidate_id)
+    candidate = ResumeResult.query.filter_by(id=candidate_id, owner_id=current_user.id).first()
     if not candidate:
         return jsonify({"error": "Selected candidate was not found."}), 404
 
-    latest_jd = JobDescription.query.order_by(JobDescription.created_at.desc()).first()
+    latest_jd = JobDescription.query.filter_by(owner_id=current_user.id).order_by(JobDescription.created_at.desc()).first()
     job_context = latest_jd.job_description if latest_jd else ""
     job_context += (
         f"\n\nScreening Metrics:\nMatch Score: {candidate.match_score:.3f}%"
@@ -555,7 +577,8 @@ def interview_answer():
     interview_session = InterviewSession(
         candidate_id=candidate.id,
         questions=json.dumps(questions),
-        answers=json.dumps(answers)
+        answers=json.dumps(answers),
+        owner_id=current_user.id
     )
     db.session.add(interview_session)
     db.session.commit()
@@ -568,36 +591,34 @@ def interview_answer():
 
 
 @app.route("/history")
+@login_required
 def history():
-
-    history = ResumeResult.query.order_by(
+    history_records = ResumeResult.query.filter_by(
+        owner_id=current_user.id
+    ).order_by(
         ResumeResult.created_at.desc()
     ).all()
 
-    total_resumes = len(history)
-
+    total_resumes = len(history_records)
     average_ats = 0
     highest_match = 0
     selected = 0
 
     if total_resumes > 0:
-
         average_ats = round(
-            sum(item.ats_score for item in history) / total_resumes,
+            sum(item.ats_score for item in history_records) / total_resumes,
             3
         )
-
         highest_match = max(
-            item.match_score for item in history
+            item.match_score for item in history_records
         )
-
         selected = len(
-            [item for item in history if item.recommendation == "Selected"]
+            [item for item in history_records if item.recommendation == "Selected"]
         )
 
     return render_template(
         "history.html",
-        history=history,
+        history=history_records,
         total_resumes=total_resumes,
         average_ats=average_ats,
         highest_match=highest_match,
@@ -606,47 +627,72 @@ def history():
 
 
 @app.route("/interview-history")
+@login_required
 def interview_history():
-    sessions = InterviewSession.query.order_by(InterviewSession.created_at.desc()).all()
+    sessions = InterviewSession.query.filter_by(
+        owner_id=current_user.id
+    ).order_by(InterviewSession.created_at.desc()).all()
+
     for session in sessions:
-        session.question_count = len(json.loads(session.questions))
+        try:
+            session.question_count = len(json.loads(session.questions))
+        except Exception:
+            session.question_count = 0
+
     return render_template("interview_history.html", sessions=sessions)
 
 
 @app.route("/interview-history/<int:id>")
+@login_required
 def interview_history_detail(id):
-    session = InterviewSession.query.get_or_404(id)
+    session = InterviewSession.query.filter_by(id=id, owner_id=current_user.id).first_or_404()
+    try:
+        questions = json.loads(session.questions)
+    except Exception:
+        questions = []
+    try:
+        answers = json.loads(session.answers)
+    except Exception:
+        answers = []
+
     return render_template(
         "interview_history_detail.html",
         session=session,
-        questions=json.loads(session.questions),
-        answers=json.loads(session.answers)
+        questions=questions,
+        answers=answers
     )
 
 
 @app.route("/interview-history/<int:id>/delete", methods=["POST"])
+@login_required
 def delete_interview_history(id):
-    session = InterviewSession.query.get_or_404(id)
+    session = InterviewSession.query.filter_by(id=id, owner_id=current_user.id).first_or_404()
     db.session.delete(session)
     db.session.commit()
+    flash("Saved interview deleted successfully.", "info")
     return redirect("/interview-history")
-@app.route("/delete/<int:id>")
+
+
+@app.route("/delete/<int:id>", methods=["GET", "POST"])
+@login_required
 def delete(id):
-
-    record = ResumeResult.query.get_or_404(id)
-
+    record = ResumeResult.query.filter_by(id=id, owner_id=current_user.id).first_or_404()
+    InterviewSession.query.filter_by(candidate_id=record.id, owner_id=current_user.id).delete()
     db.session.delete(record)
-
     db.session.commit()
-
+    flash("Candidate resume deleted successfully.", "info")
     return redirect("/history")
-@app.route("/view/<int:id>")
-def view(id):
 
-    data = ResumeResult.query.get_or_404(id)
-    latest_jd = JobDescription.query.order_by(
-    JobDescription.created_at.desc()
-).first()
+
+@app.route("/view/<int:id>")
+@login_required
+def view(id):
+    data = ResumeResult.query.filter_by(id=id, owner_id=current_user.id).first_or_404()
+    latest_jd = JobDescription.query.filter_by(
+        owner_id=current_user.id
+    ).order_by(
+        JobDescription.created_at.desc()
+    ).first()
 
     return render_template(
         "view.html",
@@ -656,8 +702,9 @@ def view(id):
 
 
 @app.route("/report/<int:id>")
+@login_required
 def download_report(id):
-    candidate = ResumeResult.query.get_or_404(id)
+    candidate = ResumeResult.query.filter_by(id=id, owner_id=current_user.id).first_or_404()
     pdf = build_candidate_report(candidate)
     safe_name = "".join(char if char.isalnum() else "_" for char in candidate.candidate_name)
     return send_file(
@@ -666,10 +713,14 @@ def download_report(id):
         as_attachment=True,
         download_name=f"smart_hire_report_{safe_name}.pdf"
     )
+
+
 @app.route("/interview/<int:id>")
+@login_required
 def interview(id):
-    ResumeResult.query.get_or_404(id)
+    ResumeResult.query.filter_by(id=id, owner_id=current_user.id).first_or_404()
     return redirect(f"/?candidate={id}#interview-assistant")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
