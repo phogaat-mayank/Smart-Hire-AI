@@ -603,13 +603,6 @@ def index():
                     if ats_score > 100:
                         ats_score = 100
 
-                    results.append((
-                        file_names[i],
-                        score,
-                        ats_score,
-                        matched_skills,
-                        missing_skills
-                    ))
                     print("Generating AI Summary...")
                     summary = generate_resume_summary(resume_texts[i])
                     print("Summary Generated Successfully!")
@@ -629,7 +622,15 @@ def index():
 
                     db.session.add(resume_result)
                     db.session.flush()
-                    results[-1] = (*results[-1], resume_result.id)
+
+                    results.append((
+                        file_names[i],
+                        score,
+                        ats_score,
+                        matched_skills,
+                        missing_skills,
+                        resume_result.id
+                    ))
                     print("Saved:", file_names[i])
 
                 # Sort by score
@@ -639,6 +640,7 @@ def index():
 
         except Exception as e:
             db.session.rollback()
+            results = []
             print("Error in resume analysis POST handler:", e)
             flash(f"Error processing resumes: {e}", "danger")
 
