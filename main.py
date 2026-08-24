@@ -320,20 +320,19 @@ def generate_resume_summary(resume_text):
         return "AI summary is temporarily unavailable (Gemini API key not configured)."
 
     prompt = f"""You are an HR Recruiter. Write a concise 4-bullet point summary of this candidate (role, experience, top skills, recommendation):
-{resume_text[:1200]}"""
-    
-    # Priority order of ultra-fast models (flash-lite gives 1-second response)
-    fast_models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash"]
-    for model_name in fast_models:
+{resume_text[:1000]}"""
+
+    # Ultra-fast models only (sub-1.5s execution, no slow thinking models)
+    for model_name in ["gemini-3.5-flash-lite", "gemini-3.5-flash"]:
         try:
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
-                config={"max_output_tokens": 160, "temperature": 0.2}
+                config={"max_output_tokens": 150, "temperature": 0.2}
             )
             if response and response.text:
                 return response.text.strip()
-        except Exception as e:
+        except Exception:
             continue
 
     return "AI summary is temporarily unavailable."
@@ -349,7 +348,7 @@ _interview_cache = {}
 
 
 def generate_interview_answers(resume_text, questions, job_description=""):
-    """Answer submitted questions with fast structured JSON output and in-memory LRU caching."""
+    """Answer submitted questions with ultra-fast structured JSON output and in-memory LRU caching."""
     if not client:
         return [{
             "question": question,
@@ -360,7 +359,7 @@ def generate_interview_answers(resume_text, questions, job_description=""):
 
     # In-memory cache check for instant response (<20ms)
     cache_key = hashlib.md5(
-        f"{resume_text[:400]}_{job_description[:200]}_{'|'.join(questions)}".encode()
+        f"{resume_text[:300]}_{job_description[:150]}_{'|'.join(questions)}".encode()
     ).hexdigest()
     if cache_key in _interview_cache:
         return _interview_cache[cache_key]
@@ -370,60 +369,70 @@ def generate_interview_answers(resume_text, questions, job_description=""):
         for number, question in enumerate(questions, start=1)
     )
     prompt = f"""You are an AI recruitment assistant. Answer every recruiter question using candidate resume AND job description.
-For evaluation questions, compare matched skills, missing requirements, experience, and ATS score.
-Keep answers concise (max 2 short bullet points).
+Keep answers concise (1-2 short sentences per question).
 
 Job Description:
-{job_description[:1200]}
+{job_description[:800]}
 
 Candidate Resume:
-{resume_text[:2000]}
+{resume_text[:1500]}
 
 Recruiter Questions:
 {numbered_questions}
 
-Return ONLY valid JSON array with exact length {len(questions)}:
-[{{"question":"...","answer":"...","evidence":"...","status":"matched|partial|missing"}}]"""
+Return ONLY a JSON array of objects with keys: "question", "answer", "evidence", "status" (status must be matched, partial, or missing)."""
 
-    fast_models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash"]
-    for model_name in fast_models:
+    for model_name in ["gemini-3.5-flash-lite", "gemini-3.5-flash"]:
         try:
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
                 config={
                     "response_mime_type": "application/json",
-                    "max_output_tokens": 600,
-                    "temperature": 0.2
+                    "max_output_tokens": 450,
+                    "temperature": 0.1
                 }
             )
             if response and response.text:
-                text_resp = response.text.strip().replace("```json", "").replace("```", "").strip()
-                answers = json.loads(text_resp)
-                if isinstance(answers, list) and len(answers) == len(questions):
+                raw = response.text.strip()
+                if raw.startswith("```"):
+                    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                    raw = re.sub(r"\s*```$", "", raw)
+                data = json.loads(raw)
+                if isinstance(data, dict):
+                    data = [data]
+
+                if isinstance(data, list) and len(data) > 0:
                     final_answers = []
-                    for question, answer in zip(questions, answers):
-                        final_answers.append({
-                            "question": answer.get("question") or question,
-                            "answer": answer.get("answer") or "Not mentioned in the resume.",
-                            "evidence": answer.get("evidence") or "No supporting evidence found.",
-                            "status": answer.get("status") or "missing"
-                        })
-                    # Save to memory cache (keep cache bounded)
+                    for idx, q in enumerate(questions):
+                        if idx < len(data) and isinstance(data[idx], dict):
+                            final_answers.append({
+                                "question": data[idx].get("question") or q,
+                                "answer": data[idx].get("answer") or "Not mentioned in the resume.",
+                                "evidence": data[idx].get("evidence") or "No supporting evidence found.",
+                                "status": data[idx].get("status") or "missing"
+                            })
+                        else:
+                            final_answers.append({
+                                "question": q,
+                                "answer": "Not mentioned in the resume.",
+                                "evidence": "No supporting evidence found.",
+                                "status": "missing"
+                            })
                     if len(_interview_cache) > 200:
                         _interview_cache.clear()
                     _interview_cache[cache_key] = final_answers
                     return final_answers
-        except Exception as error:
+        except Exception:
             continue
 
-    # Fallback response
     return [{
         "question": question,
         "answer": "AI answer is temporarily unavailable for this question.",
         "evidence": "Please try again.",
         "status": "missing"
     } for question in questions]
+
 
 
 
@@ -636,20 +645,14 @@ def index():
             if not resume_texts:
                 flash("No readable text found in the uploaded resume(s). Please upload text-based PDFs.", "warning")
             else:
-                # Concurrent BERT Encoding & Gemini Summaries in Parallel for 3x speedup
-                print(f"Executing parallel BERT inference + AI Summaries for {len(resume_texts)} resumes...")
-                with ThreadPoolExecutor(max_workers=min(len(resume_texts) + 2, 8)) as executor:
-                    def compute_embeddings():
-                        with torch.inference_mode():
-                            r_emb = model.encode(resume_texts, batch_size=8, show_progress_bar=False)
-                            j_emb = model.encode(job_description, show_progress_bar=False)
-                        return r_emb, j_emb
+                # 1. Ultra-fast batch BERT Embedding on CPU (~0.1s)
+                with torch.inference_mode():
+                    resume_embeddings = model.encode(resume_texts, batch_size=8, show_progress_bar=False)
+                    jd_embedding = model.encode(job_description, show_progress_bar=False)
 
-                    bert_future = executor.submit(compute_embeddings)
-                    summary_futures = [executor.submit(generate_resume_summary, text) for text in resume_texts]
-
-                    summaries = [f.result() for f in summary_futures]
-                    resume_embeddings, jd_embedding = bert_future.result()
+                # 2. Fast parallel Gemini summaries (~1.0s)
+                with ThreadPoolExecutor(max_workers=min(len(resume_texts), 4)) as executor:
+                    summaries = list(executor.map(generate_resume_summary, resume_texts))
 
                 resume_objects = []
                 scores = []
