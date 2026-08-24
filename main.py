@@ -322,8 +322,8 @@ def generate_resume_summary(resume_text):
     prompt = f"""You are an HR Recruiter. Write a concise 4-bullet point summary of this candidate (role, experience, top skills, recommendation):
 {resume_text[:1200]}"""
     
-    # Priority order of fast models
-    fast_models = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"]
+    # Priority order of ultra-fast models (flash-lite gives 1-second response)
+    fast_models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash"]
     for model_name in fast_models:
         try:
             response = client.models.generate_content(
@@ -385,7 +385,7 @@ Recruiter Questions:
 Return ONLY valid JSON array with exact length {len(questions)}:
 [{{"question":"...","answer":"...","evidence":"...","status":"matched|partial|missing"}}]"""
 
-    fast_models = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"]
+    fast_models = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash"]
     for model_name in fast_models:
         try:
             response = client.models.generate_content(
