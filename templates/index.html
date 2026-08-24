@@ -7,6 +7,11 @@
 
     <title>AI Resume Screening System</title>
 
+    <!-- DNS Prefetch & Preconnect for Instant CDN Loading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+
     <!-- Bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -547,25 +552,26 @@
     <script src="https://cdn.jsdelivr.net/npm/tsparticles@2/tsparticles.bundle.min.js"></script>
 
     <script>
+        const isMobile = window.innerWidth < 768;
         tsParticles.load("tsparticles", {
             background: {
                 color: "transparent"
             },
             particles: {
                 number: {
-                    value: 40
+                    value: isMobile ? 15 : 30
                 },
                 color: {
                     value: "#2563eb"
                 },
                 links: {
-                    enable: true,
+                    enable: !isMobile,
                     color: "#93c5fd",
-                    distance: 150
+                    distance: 140
                 },
                 move: {
                     enable: true,
-                    speed: 1
+                    speed: 0.8
                 },
                 size: {
                     value: 2

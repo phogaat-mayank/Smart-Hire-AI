@@ -23,4 +23,5 @@ COPY . .
 EXPOSE 7860
 
 # Start app with dynamic shell port expansion and multi-threading for blazing fast responses
-CMD ["sh", "-c", "gunicorn main:app --bind 0.0.0.0:${PORT:-7860} --timeout 120 --workers 1 --threads 4"]
+CMD ["sh", "-c", "gunicorn main:app --bind 0.0.0.0:${PORT:-7860} --timeout 120 --workers 2 --threads 8 --worker-class gthread"]
+
