@@ -323,7 +323,7 @@ def generate_resume_summary(resume_text):
 {resume_text[:1200]}"""
     
     # Priority order of fast models
-    fast_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+    fast_models = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"]
     for model_name in fast_models:
         try:
             response = client.models.generate_content(
@@ -385,7 +385,7 @@ Recruiter Questions:
 Return ONLY valid JSON array with exact length {len(questions)}:
 [{{"question":"...","answer":"...","evidence":"...","status":"matched|partial|missing"}}]"""
 
-    fast_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    fast_models = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash"]
     for model_name in fast_models:
         try:
             response = client.models.generate_content(
