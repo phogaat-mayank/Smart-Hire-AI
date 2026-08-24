@@ -16,6 +16,7 @@ from flask import (
     render_template,
     request,
     send_file,
+    send_from_directory,
     url_for,
 )
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -925,6 +926,15 @@ def download_report(id):
 def interview(id):
     ResumeResult.query.filter_by(id=id, owner_id=current_user.id).first_or_404()
     return redirect(f"/?candidate={id}#interview-assistant")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(
+        os.path.join(app.root_path, "static", "images"),
+        "logo.png",
+        mimetype="image/png"
+    )
 
 
 if __name__ == "__main__":
